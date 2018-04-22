@@ -1,4 +1,10 @@
 function files=fetchID(id)
+% Fetch whatever ID file you want.
+% Input:ID 
+% Output: files.L is left image; files.R is right image
+% files.mask=1 for right mask, =0 for left mask, =-1 if no mask exists.
+% Prasad Vagdargi
+
 % Define search folders here
 benignFolder=dir('../../MIAData/MammoTraining/benign');
 healthyFolder=dir('../../MIAData/MammoTraining/healthy');
