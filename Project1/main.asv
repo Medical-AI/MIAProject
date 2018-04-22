@@ -1,0 +1,9 @@
+addpath('../../MIAData/MammoTraining');
+raw=importdata('Project1List.xlsx');
+% Get the labels
+label=raw.data;
+benignFolder=dir('../../MIAData/MammoTraining/benign');
+for i=1:length(benignFolder)
+%     Read the benign images
+   benignImages(i)=imread(benignFolder.folder(2+i:end));
+end
