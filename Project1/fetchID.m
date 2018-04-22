@@ -15,7 +15,7 @@ if(id>3000)
             for j=1:2
                 %                 Look for the corresponding files and store them
                 if contains(malignantFolder(i+j).name,[num2str(id),'_','RIGHT.png'])
-                    files.R=imread([malignantFolder(i).folder,'/',malignantFolder(i).name]);
+                    files.R=imread([malignantFolder(i+j).folder,'/',malignantFolder(i).name]);
                 elseif contains(malignantFolder(i+j).name,[num2str(id),'_','RIGHT_MASK.png'])
                     %                     LR bit is 1 if right mask is to be used
                     files.lr=1;
@@ -37,7 +37,7 @@ elseif(id>2000)
             files.L=imread([benignFolder(i).folder,'/',benignFolder(i).name]);
             for j=1:2
                 if contains(benignFolder(i+j).name,[num2str(id),'_','RIGHT.png'])
-                    files.R=imread([benignFolder(i).folder,'/',benignFolder(i).name]);
+                    files.R=imread([benignFolder(i+j).folder,'/',benignFolder(i).name]);
                 elseif contains(benignFolder(i+j).name,[num2str(id),'_','RIGHT_MASK.png'])
                     files.lr=1;
                     files.mask=imread([benignFolder(i+j).folder,'/',benignFolder(i).name]);
@@ -54,17 +54,8 @@ elseif(id>1000)
     for i=1:length(healthyFolder)
         if contains(healthyFolder(i).name,num2str(id))
             files.L=imread([healthyFolder(i).folder,'/',healthyFolder(i).name]);
-            for j=1:2
-                if contains(healthyFolder(i+j).name,[num2str(id),'_','RIGHT.png'])
-                    files.R=imread([healthyFolder(i).folder,'/',healthyFolder(i).name]);
-                elseif contains(healthyFolder(i+j).name,[num2str(id),'_','RIGHT_MASK.png'])
-                    files.lr=1;
-                    files.mask=imread([healthyFolder(i+j).folder,'/',healthyFolder(i).name]);
-                elseif contains(healthyFolder(i+j).name,[num2str(id),'_','LEFT_MASK.png'])
-                    files.lr=0;
-                    files.mask=imread([healthyFolder(i+j).folder,'/',healthyFolder(i).name]);
-                end
-            end
+            files.R=imread([healthyFolder(i+1).folder,'/',healthyFolder(i+1).name]);
+            files.mask=-1;
             return;
         end
     end
