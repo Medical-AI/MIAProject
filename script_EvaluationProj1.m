@@ -3,7 +3,8 @@
 clear all;
 clc;
 
-%% Read file lists for and true segmentations
+%% Read file lists for and true segmentationsls
+
 datatopdir = './MammoTesting/';  
 sublistfile = fullfile(['./Project1ListTesting.xlsx']);
 
@@ -20,7 +21,7 @@ dices = zeros(numsubs,2);       % ovelap measure
 estdiag = zeros(numsubs,2);     % diagnosis measure
 times = zeros(numsubs,1);       % time measure
 
-for i =8:numsubs        % for each subject
+for i =1:numsubs        % for each subject
     
     mammoimgleft = imread([datatopdir,sublist(i,:) '_LEFT.png']);
     mammoimgright = imread([datatopdir,sublist(i,:) '_RIGHT.png']);

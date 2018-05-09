@@ -1,18 +1,14 @@
-function [mammoMaskOut] = PipeLine(mammoIn)
+function [mammoMaskOut,mammoDS,mammoFH] = PipeLine(mammoIn)
 
 % Preprocessing
 mammoIn = mat2gray(mammoIn);
 
 % Down Sample the Original High Resolution Mammogram for Speed Up
 mammoDS = imresize(mammoIn, 0.1);
-mammoMaskOut = zeros(size(mammoDS));
-
-% Histogram Equalization
-% mammoHEQ=histeq(mammoDS);
-% mammoHEQ=adapthisteq(mammoDS);
+mammoMaskOut = zeros(size(mammoDS,1),size(mammoDS,2),0);
 
 % Logarithmic intensity range expansion
-mammoRE = log(1 + mammoDS);
+mammoRE = mat2gray(log(1 + mammoDS));
 
 % Otsu's Binarization
 mammoBinary = imbinarize(mammoRE);
@@ -21,137 +17,73 @@ mammoBinary = imbinarize(mammoRE);
 CC = bwconncomp(mammoBinary,8);
 numPixels = cellfun(@numel,CC.PixelIdxList);
 [~,idx] = max(numPixels);
-mammoClean = zeros(size(mammoBinary));
-mammoClean(CC.PixelIdxList{idx}) = 1;
+mammoBM = zeros(size(mammoBinary));
+mammoBM(CC.PixelIdxList{idx}) = 1;
 
 % Morphological Closing to Remove Spurious Detail
-mammoSmooth = imclose(mammoClean,strel('disk',20));
-
-% Fill Holes in Mask
-mammoFH = imfill(mammoSmooth,'holes');
-mammoBreast = imdilate(mammoFH,strel('disk',20));
+mammoSmoothBD = imclose(mammoBM,strel('disk',20));
+mammoFH = imfill(mammoSmoothBD,'holes');
+mammoBreastMask = imdilate(mammoFH,strel('disk',20));
 
 % Remove Background in Mammogram
 mammoBR = mammoDS;
-mammoBR(~mammoBreast) = 0;
+mammoBR(~mammoBreastMask) = 0;
 
-%
-strelSize=50;
-SE = strel('disk',strelSize);
-mammoPeak = imtophat(mammoBR,SE);
-mammoBP = imbinarize(mammoPeak);
-massMask= imfill(imclearborder(mammoBP,8),'holes');
-massMaskClean = imopen(massMask,strel('disk',5));
+% Keep Peaks
+SE = strel('disk',50);
+mammoTopHat = imtophat(mammoBR,SE);
 
+% Remove Calc
+SE = strel('disk',2);
+mammoTopHat = imopen(mammoTopHat,SE);
+mammoCalMask = (mammoTopHat > 0.45);
+mammoTopHat(mammoCalMask) = 0.45;
 
-% From the Seeds to Segmentation
-seedMaskOut = RegionGrow(massMaskClean,mammoBR);
+% Remove Muscle
+peakMask = imclearborder(imbinarize(mammoTopHat,max(mammoTopHat(:))/2));
 
-%%
-% Remove Mass Based on Contrast
-% CC = bwconncomp(seedMaskOut,8);
-% numPixels = cellfun(@numel,CC.PixelIdxList);
-% potentialMass = find(numPixels > 200);
-% maxContrast = 0.05;
-% for object = potentialMass
-%
-%     % pick a single object
-%     objectMask = zeros(size(seedMaskOut));
-%     objectMask(CC.PixelIdxList{object})=1;
-%
-%     % find the corresponding background
-%     bgMask = imdilate(objectMask,strel('disk',5))-objectMask;
-%
-%     % compute the mean intensity of the current object
-%     objectImage = mammoBR;
-%     objectImage(~objectMask) = 0;
-%     objectMean = sum(objectImage(:))/sum(objectMask(:));
-%
-%     % Compute the Mean Intensity of the Background
-%     bgImage = mammoBR;
-%     bgImage(~bgMask) = 0;
-%     bgMean = sum(bgImage(:))/sum(bgMask(:));
-%
-%     if objectMean <= bgMean
-%         seedMaskOut(objectMask) = 0;
-%         continue;
-%     end
-%
-%     % Otherwise, Compute the contrast
-%     contrast = (objectMean - bgMean)/(objectMean + bgMean);
-%
-%     if contrast > maxContrast
-%         maxContrast = contrast;
-%         mammoMaskOut = zeros(size(mammoDS));
-%         mammoMaskOut(CC.PixelIdxList{object}) = 1;
-%     end
-%
-% end
-%
-
-%%
-CC = bwconncomp(seedMaskOut,8);
+% Remove small peaks
+CC = bwconncomp(peakMask);
 numPixels = cellfun(@numel,CC.PixelIdxList);
-potentialMass = find(numPixels > 200);
-
-for object = potentialMass
-    
-    % pick a single object
-    objectMask = zeros(size(seedMaskOut));
-    objectMask(CC.PixelIdxList{object})=1;
-    
-    
-    % feature1: length of skeleton/area
-    objectSkel = bwmorph(objectMask,'skel',Inf);
-    skelLength = sum(objectSkel(:));
-    objectArea = sum(objectMask(:));
-    disp(skelLength/objectArea);
-    if skelLength/objectArea > 0.25
-        continue;
-    end
-    
-    % feature2: size of bounding box
-    s  = regionprops(imopen(objectMask,strel('disk',1)),'Solidity');
-    disp(s.Solidity)
-    if s.Solidity < 0.8
-        continue;
-    end
-    
-    % compute the mean intensity of the current object
-    objectImage = mammoBR;
-    objectImage(~objectMask) = 0;
-    objectMean = sum(objectImage(:))/sum(objectMask(:));
-    
-    % find the corresponding background
-    bgMask = imdilate(objectMask,strel('disk',5))-objectMask;
-        
-    % Compute the Mean Intensity of the Background
-    bgImage = mammoBR;
-    bgImage(~bgMask) = 0;
-    bgMean = sum(bgImage(:))/sum(bgMask(:));
-    
-    % feature4: contrast
-    contrast = (objectMean - bgMean)/(objectMean + bgMean);
-    
-    if contrast < 0.06 || objectMean < 0.5
-        continue;
-    end
-    
-    mammoMaskOut = objectMask;
-    % feature2: difference of intensity mean
-    if objectMean - bgMean > 0.1 && objectMean > 0.6
-        break;
-    end
-    
+x = find(numPixels > 100);
+if isempty(x)
+%     figure,
+%     subplot(2,4,1),imshow(mammoRE);
+%     subplot(2,4,2),imshow(mammoBR);
+%     subplot(2,4,3),imshow(mammoTopHat);
+%     subplot(2,4,4),imshow(mammoBR); hold on
+%     subplot(2,4,4),visboundaries(peakMask);
+    return;
 end
-%%
-figure,
-subplot(2,4,1),imshow(mammoDS);
-subplot(2,4,2),imshow(mammoBinary);
-subplot(2,4,3),imshow(mammoBR);
-subplot(2,4,4),imshow(mammoPeak);
-subplot(2,4,5),imshow(mammoBP);
-subplot(2,4,6),imshow(massMaskClean);
-subplot(2,4,7),imshow(seedMaskOut);
-subplot(2,4,8),imshow(mammoMaskOut);
+
+peakMask(:) = 0;
+for object = x
+    peakMask(CC.PixelIdxList{object}) = 1;
+end
+
+%% 
+CC = bwconncomp(peakMask);
+for object = 1:CC.NumObjects
+    objectMask = zeros(size(peakMask));
+    objectMask(CC.PixelIdxList{object}) = 1;
+    massMask = activecontour(mammoTopHat,objectMask,'Chan-Vese','SmoothFactor',2,'ContractionBias',0.5);
+    
+    if sum(massMask(:)) > 200
+        mammoMaskOut = cat(3,mammoMaskOut,massMask);
+%         figure,
+%         subplot(2,4,1),imshow(mammoRE);
+%         subplot(2,4,2),imshow(mammoBR);
+%         subplot(2,4,3),imshow(mammoTopHat);
+%         subplot(2,4,4),imshow(mammoBR); hold on
+%         subplot(2,4,4),visboundaries(peakMask);
+%         
+%         bd = bwboundaries(massMask);
+%         subplot(2,4,5),imshow(mammoBR); hold on
+%         subplot(2,4,5),visboundaries(bd)
+    else
+        continue;
+    end
+end
+
+
 end
