@@ -21,7 +21,7 @@ dices = zeros(numsubs,2);       % ovelap measure
 estdiag = zeros(numsubs,2);     % diagnosis measure
 times = zeros(numsubs,1);       % time measure
 
-for i =1:numsubs        % for each subject
+for i =  1:numsubs        % for each subject
     
     mammoimgleft = imread([datatopdir,sublist(i,:) '_LEFT.png']);
     mammoimgright = imread([datatopdir,sublist(i,:) '_RIGHT.png']);
@@ -32,10 +32,11 @@ for i =1:numsubs        % for each subject
     %%% REPLACE THE LINE BELOW WITH YOUR FUNCTION CALL for runProject1! %%
     
     [estdiag(i,:), estmaskleft,estmaskright] = runProject1(mammoimgleft,mammoimgright);
-
+    disp(i)
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     
     times(i)=toc;
+
     %% Compute overlap
     % Left side
     if truediag(i,1) == 0   

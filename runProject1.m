@@ -34,89 +34,119 @@ estmaskright = zeros(size(mammoimgright));
 % Pipeline for Right Mammogram
 [estmaskrightDS,mammorightDS,mammorightBM]= PipeLine(mammoimgright);
 
+% No suspected mass detected, both mask is zero, return healthy.
 if size(estmaskleftDS,3) == 0 && size(estmaskrightDS,3) == 0
     estmaskleft = zeros(size(mammoimgleft));
     estmaskright = zeros(size(mammoimgright));
     estdiag = [0,0];
     return
+    
+    % Left Mammogram Has No Suspect Mass, Must Be The Right Mammogram
 elseif size(estmaskleftDS,3) == 0
-    
     feature = Mask2Feature(estmaskrightDS,mammorightDS,mammorightBM);
-    
+    indicator = 2;
+    % Right Mammogram Has No Suspect Mass, Must Be The Left Mammogram
 elseif size(estmaskrightDS,3) == 0
-    
     feature = Mask2Feature(estmaskleftDS,mammoleftDS,mammoleftBM);
-
+    indicator = 1;
+    % Combine Suspect Masses from Both Mammogram
 else
     leftfeature = Mask2Feature(estmaskleftDS,mammoleftDS,mammoleftBM);
     rightfeature = Mask2Feature(estmaskrightDS,mammorightDS,mammorightBM);
     feature = cat(1,leftfeature,rightfeature);
-
+    indicator = 3;
 end
 
-%% For training
-% if exist('totalfeature.mat','file')
-%     clear totalfeature
-%     load('totalfeature.mat','totalfeature');
-%     totalfeature = cat(1,totalfeature,feature);
-%     save('totalfeature.mat','totalfeature')
-% elsedist(:,1) .* dist(:,1)
-%     totalfeature =feature;
-%     save('totalfeature.mat','totalfeature')
+%% For Training
+
+% if exist('features.mat','file')
+%     load('features.mat','features');
+%     features = cat(1,features,feature);
+%     save('features.mat','features');
+% else
+%     features = feature;
+%     save('features.mat','features');
 % end
-% disp(totalfeature)
+%
+% return;
 
-%%
-load('totalfeature.mat');
-gt = [0,0,1,1,0,1,0,0,1,0,0,1,0,0,0,0,0,0,0,1,2,2,2,2,2,0,2,2];
-flag = 0;
+%% For Testing
+% normalize features
+load('coeff.mat','coeff');
+load('features.mat','features')
+features = cat(1,features,feature);
+for i = 1:size(features,2)
+    cA3 = features(:,i);
+    cA3=reshape(zscore(cA3(:)),size(cA3,1),size(cA3,2));
+    features(:,i) = cA3;
+end
+feature = features(29:end,:);
 
-for point = 1:size(feature,1)
-    dist = totalfeature - repmat(feature(point,:),28,1);
-    dist = dist(:,1) .* dist(:,1) + dist(:,2) .* dist(:,2);
-    [~,indice] = min(dist);
-    label = gt(indice);
-    if label ~= 0
-        
-        flag = 1;
-        if size(estmaskleftDS,3) == 0
-            estmaskrightDS = estmaskrightDS(:,:,point);
-            estmaskleftDS = zeros(size(mammoleftDS,1),size(mammoleftDS,2));
-            estdiag = [0,label];
-            break;
-        elseif size(estmaskrightDS,3) == 0
-            estmaskleftDS = estmaskleftDS(:,:,point);
-            estmaskrightDS = zeros(size(mammoleftDS,1),size(mammoleftDS,2));
-            estdiag = [label,0];
-            break;
-        else
-            if point > size(estmaskleftDS,3)
-                estmaskrightDS = estmaskrightDS(:,:,point-size(estmaskleftDS,3));
-                estmaskleftDS = zeros(size(mammoleftDS,1),size(mammoleftDS,2));
-                estdiag = [0,label];
-            else
-                estmaskrightDS = zeros(size(mammoleftDS,1),size(mammoleftDS,2));
-                estmaskleftDS = estmaskleftDS(:,:,point);
-                estdiag = [label,0];
-            end
-            break;
-        end
+% project onto principle components
+feature = feature * coeff;
+feature = feature(:,1:7);
+
+% load('model_tree.mat','tree');
+load('model_knn.mat','knn');
+[label,score,~] = predict(knn,feature);
+
+if all(label == 0)
+    estmaskleft = zeros(size(mammoimgleft));
+    estmaskright = zeros(size(mammoimgright));
+    estdiag = [0,0];
+    return
+elseif ~any(label == 1)
+    indice = find(label == 0);
+    score(indice,:) = 0;
+    [~,maskIndex] = max(score(:));
+    [maskRow,~] = ind2sub([size(score,1),size(score,2)],maskIndex);
+    diag = 2;
+elseif ~any(label == 2)
+    indice = find(label == 0);
+    score(indice,:) = 0;
+    [~,maskIndex] = max(score(:));
+    [maskRow,~] = ind2sub([size(score,1),size(score,2)],maskIndex);
+    diag = 1;
+else
+    indice = find(label~=0);
+    score(indice,:) = 0;
+    [~,maskIndex] = max(score(:));
+    [maskRow,~] = ind2sub([size(score,1),size(score,2)],maskIndex);
+    diag = label(maskIndex);
+end
+
+if indicator == 3
+    if maskRow > size(estmaskleftDS,3)
+        indicator =2;
+        maskRow = maskRow - size(estmaskleftDS,3);
+    else
+        indicator = 1;
     end
 end
 
-if flag == 0
-    estmaskrightDS = zeros(size(mammoleftDS,1),size(mammoleftDS,2));
-    estmaskleftDS = zeros(size(mammoleftDS,1),size(mammoleftDS,2));
-    estdiag = 0;
+if indicator == 1
+    estdiag = [diag,0];
+    
+    estmaskright = zeros(size(mammoimgright));
+    
+    estmaskleftDS = squeeze(estmaskleftDS(:,:,maskRow));
+    estmaskleftUS = imresize(estmaskleftDS(:,:,1), 10);
+    estmaskleft(1:min(size(estmaskleftUS,1),size(estmaskleft,1)),1:min(size(estmaskleftUS,2),size(estmaskleft,2))) = ...
+        estmaskleftUS(1:min(size(estmaskleftUS,1),size(estmaskleft,1)),1:min(size(estmaskleftUS,2),size(estmaskleft,2)));
+    
+elseif indicator == 2
+    estdiag = [0,diag];
+    estmaskleft = zeros(size(mammoimgleft));
+    
+    estmaskrightDS = squeeze(estmaskrightDS(:,:,maskRow));
+    estmaskrightUS = imresize(estmaskrightDS(:,:,1), 10);
+    estmaskright(1:min(size(estmaskrightUS,1),size(estmaskright,1)),1:min(size(estmaskrightUS,2),size(estmaskright,2))) = ...
+        estmaskrightUS(1:min(size(estmaskrightUS,1),size(estmaskright,1)),1:min(size(estmaskrightUS,2),size(estmaskright,2)));
+    
 end
-% Generate features for each mask
-estmaskleftUS = imresize(estmaskleftDS(:,:,1), 10);
-estmaskleft(1:min(size(estmaskleftUS,1),size(estmaskleft,1)),1:min(size(estmaskleftUS,2),size(estmaskleft,2))) = ...
-    estmaskleftUS(1:min(size(estmaskleftUS,1),size(estmaskleft,1)),1:min(size(estmaskleftUS,2),size(estmaskleft,2)));
 
-estmaskrightUS = imresize(estmaskrightDS(:,:,1), 10);
-estmaskright(1:min(size(estmaskrightUS,1),size(estmaskright,1)),1:min(size(estmaskrightUS,2),size(estmaskright,2))) = ...
-    estmaskrightUS(1:min(size(estmaskrightUS,1),size(estmaskright,1)),1:min(size(estmaskrightUS,2),size(estmaskright,2)));
+
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

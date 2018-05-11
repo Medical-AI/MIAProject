@@ -55,15 +55,9 @@ if isempty(x)
 %     subplot(2,4,4),visboundaries(peakMask);
     return;
 end
+%%
 
-peakMask(:) = 0;
 for object = x
-    peakMask(CC.PixelIdxList{object}) = 1;
-end
-
-%% 
-CC = bwconncomp(peakMask);
-for object = 1:CC.NumObjects
     objectMask = zeros(size(peakMask));
     objectMask(CC.PixelIdxList{object}) = 1;
     massMask = activecontour(mammoTopHat,objectMask,'Chan-Vese','SmoothFactor',2,'ContractionBias',0.5);
@@ -81,6 +75,12 @@ for object = 1:CC.NumObjects
 %         subplot(2,4,5),imshow(mammoBR); hold on
 %         subplot(2,4,5),visboundaries(bd)
     else
+%         figure,
+%         subplot(2,4,1),imshow(mammoRE);
+%         subplot(2,4,2),imshow(mammoBR);
+%         subplot(2,4,3),imshow(mammoTopHat);
+%         subplot(2,4,4),imshow(mammoBR); hold on
+%         subplot(2,4,4),visboundaries(peakMask);
         continue;
     end
 end
